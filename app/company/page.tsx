@@ -3,132 +3,102 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { Tender, Vendor, ShortlistedVendor, Bid } from '@/lib/types';
+import { Tender, Company } from '@/lib/types';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Store, FileText, TrendingUp, CheckCircle2, Calendar, DollarSign, MapPin } from 'lucide-react';
+import { Building2, MessageSquare, Gavel, TrendingUp, Plus, Clock, CheckCircle2 } from 'lucide-react';
 
-export default function VendorDashboard() {
+export default function CompanyDashboard() {
   const router = useRouter();
-  const [vendors, setVendors] = useState<Vendor[]>([]);
-  const [selectedVendor, setSelectedVendor] = useState<Vendor | null>(null);
-  const [availableTenders, setAvailableTenders] = useState<(Tender & { shortlisted?: ShortlistedVendor })[]>([]);
-  const [myBids, setMyBids] = useState<Bid[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
+  const [tenders, setTenders] = useState<Tender[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadVendors();
+    loadCompanies();
   }, []);
 
   useEffect(() => {
-    if (selectedVendor) {
-      loadData();
-      const interval = setInterval(loadData, 3000);
-      return () => clearInterval(interval);
+    if (selectedCompany) {
+      loadTenders();
     }
-  }, [selectedVendor]);
+  }, [selectedCompany]);
 
-  async function loadVendors() {
-    //  If Supabase not configured, use mock data
+  async function loadCompanies() {
+    // Check if Supabase env vars exist — if not, use mock data
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      console.warn(' No Supabase credentials found. Loading demo vendor dashboard.');
-      const demoVendor = {
-        id: 'demoVendor1',
-        name: 'GreenChem Suppliers',
-        location: 'Pune, India',
-        rating: 4.8,
-        specializations: ['Solvents', 'Catalysts', 'Bulk Chemicals'],
-        certifications: ['ISO 9001', 'REACH Compliant'],
-      } as Vendor;
-
-      setVendors([demoVendor]);
-      setSelectedVendor(demoVendor);
-      setAvailableTenders([
+      console.warn(' No Supabase environment variables found. Using demo data.');
+      const demoCompany = { id: 'demo1', name: 'Demo Company' } as Company;
+      setCompanies([demoCompany]);
+      setSelectedCompany(demoCompany);
+      setTenders([
         {
           id: 'demoTender1',
-          title: 'Supply of Chemical Y',
-          company_id: 'demoCompany1',
-          status: 'open',
-          chemical_name: 'Chemical Y',
-          quantity: 500,
+          title: 'Procurement of Chemical X',
+          company_id: 'demo1',
+          status: 'negotiating',
+          chemical_name: 'Chemical X',
+          quantity: 100,
           unit: 'kg',
-          delivery_location: 'Delhi',
+          delivery_location: 'Mumbai',
           deadline: new Date().toISOString(),
-          shortlisted: { fit_score: 87 } as ShortlistedVendor,
-        } as any,
-      ]);
-      setMyBids([
-        {
-          id: 'demoBid1',
-          vendor_id: 'demoVendor1',
-          tender_id: 'demoTender1',
-          initial_price: 15000,
-          current_price: 14000,
-          status: 'submitted',
-          delivery_time: 7,
-          created_at: new Date().toISOString(),
-          tender: { title: 'Supply of Chemical Y' },
-        } as any,
+        } as Tender,
       ]);
       setLoading(false);
       return;
     }
 
-    //  Real Supabase fetch
-    const { data } = await supabase.from('vendors').select('*').order('created_at', { ascending: false });
+    //  Real Supabase fetching
+    const { data } = await supabase.from('companies').select('*').order('created_at', { ascending: false });
     if (data && data.length > 0) {
-      setVendors(data);
-      setSelectedVendor(data[0]);
+      setCompanies(data);
+      setSelectedCompany(data[0]);
     }
     setLoading(false);
   }
 
-  async function loadData() {
-    if (!selectedVendor) return;
+  async function loadTenders() {
+    if (!selectedCompany) return;
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) return;
 
-    const { data: shortlistedData } = await supabase
-      .from('shortlisted_vendors')
-      .select('*, tender:tenders(*)')
-      .eq('vendor_id', selectedVendor.id)
-      .eq('status', 'approved');
-
-    if (shortlistedData) {
-      const tenders = shortlistedData
-        .map((s: any) => ({ ...s.tender, shortlisted: s }))
-        .filter((t: any) => !['completed', 'cancelled'].includes(t.status));
-      setAvailableTenders(tenders);
-    }
-
-    const { data: bidsData } = await supabase
-      .from('bids')
-      .select('*, tender:tenders(*)')
-      .eq('vendor_id', selectedVendor.id)
+    const { data } = await supabase
+      .from('tenders')
+      .select('*')
+      .eq('company_id', selectedCompany.id)
       .order('created_at', { ascending: false });
 
-    if (bidsData) setMyBids(bidsData as any);
+    if (data) setTenders(data);
   }
 
+  const getStatusColor = (status: string) => {
+    const colors: Record<string, string> = {
+      draft: 'bg-gray-500',
+      collecting_info: 'bg-blue-500',
+      shortlisting: 'bg-cyan-500',
+      awaiting_approval: 'bg-yellow-500',
+      negotiating: 'bg-orange-500',
+      auction: 'bg-red-500',
+      evaluating: 'bg-purple-500',
+      completed: 'bg-green-500',
+    };
+    return colors[status] || 'bg-gray-500';
+  };
+
   const stats = [
-    { label: 'Available Tenders', value: availableTenders.length, icon: FileText, color: 'text-blue-600' },
-    {
-      label: 'Active Bids',
-      value: myBids.filter((b) => ['submitted', 'under_negotiation', 'accepted'].includes(b.status)).length,
-      icon: TrendingUp,
-      color: 'text-orange-600',
-    },
-    { label: 'Won Tenders', value: myBids.filter((b) => b.status === 'accepted').length, icon: CheckCircle2, color: 'text-green-600' },
-    { label: 'Total Bids', value: myBids.length, icon: DollarSign, color: 'text-purple-600' },
+    { label: 'Active Tenders', value: tenders.filter((t) => !['completed', 'cancelled'].includes(t.status)).length, icon: Clock, color: 'text-blue-600' },
+    { label: 'Completed', value: tenders.filter((t) => t.status === 'completed').length, icon: CheckCircle2, color: 'text-green-600' },
+    { label: 'In Negotiation', value: tenders.filter((t) => t.status === 'negotiating').length, icon: MessageSquare, color: 'text-orange-600' },
+    { label: 'In Auction', value: tenders.filter((t) => t.status === 'auction').length, icon: Gavel, color: 'text-red-600' },
   ];
 
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto"></div>
-          <p className="mt-4 text-slate-600">Loading vendor dashboard...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-slate-600">Loading dashboard...</p>
         </div>
       </div>
     );
@@ -137,64 +107,46 @@ export default function VendorDashboard() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
       <div className="border-b bg-white shadow-sm">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center space-x-4">
-            <div className="bg-gradient-to-br from-green-600 to-emerald-600 rounded-xl p-3 shadow-lg">
-              <Store className="h-8 w-8 text-white" />
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="bg-gradient-to-br from-blue-600 to-cyan-600 rounded-xl p-3 shadow-lg">
+                <Building2 className="h-8 w-8 text-white" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-slate-900">Dealnox.AI</h1>
+                <p className="text-sm text-slate-600">Company Procurement Dashboard</p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-slate-900">Dealnox.AI</h1>
-              <p className="text-sm text-slate-600">Vendor Portal</p>
+            <div className="flex items-center space-x-3">
+              <select
+                value={selectedCompany?.id || ''}
+                onChange={(e) => {
+                  const company = companies.find((c) => c.id === e.target.value);
+                  setSelectedCompany(company || null);
+                }}
+                className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {companies.map((company) => (
+                  <option key={company.id} value={company.id}>
+                    {company.name}
+                  </option>
+                ))}
+              </select>
+              <Button
+                onClick={() => router.push('/company/tender/new')}
+                size="lg"
+                className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 shadow-lg"
+              >
+                <Plus className="h-5 w-5 mr-2" />
+                Start Procurement
+              </Button>
             </div>
           </div>
-          <select
-            value={selectedVendor?.id || ''}
-            onChange={(e) => {
-              const vendor = vendors.find((v) => v.id === e.target.value);
-              setSelectedVendor(vendor || null);
-            }}
-            className="px-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500"
-          >
-            {vendors.map((vendor) => (
-              <option key={vendor.id} value={vendor.id}>
-                {vendor.name}
-              </option>
-            ))}
-          </select>
         </div>
       </div>
 
       <div className="container mx-auto px-6 py-8">
-        {selectedVendor && (
-          <Card className="border-0 shadow-lg mb-8 bg-gradient-to-r from-green-50 to-emerald-50">
-            <CardContent className="p-6">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h2 className="text-2xl font-bold text-slate-900 mb-2">{selectedVendor.name}</h2>
-                  <p className="text-sm text-slate-600 mb-4">
-                    <MapPin className="inline h-4 w-4 mr-1" />
-                    {selectedVendor.location} • Rating: {selectedVendor.rating}/5.0
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedVendor.specializations?.map((spec, idx) => (
-                      <Badge key={idx} variant="outline" className="bg-white">
-                        {spec}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {selectedVendor.certifications?.map((cert, idx) => (
-                    <Badge key={idx} className="bg-green-600">
-                      {cert}
-                    </Badge>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {stats.map((stat, index) => (
             <Card key={index} className="border-0 shadow-lg hover:shadow-xl transition-shadow duration-300">
@@ -213,148 +165,65 @@ export default function VendorDashboard() {
           ))}
         </div>
 
-        <Tabs defaultValue="available" className="space-y-6">
-          <TabsList className="bg-white border shadow-sm p-1">
-            <TabsTrigger value="available" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
-              <FileText className="h-4 w-4 mr-2" />
-              Available Tenders ({availableTenders.length})
-            </TabsTrigger>
-            <TabsTrigger value="mybids" className="data-[state=active]:bg-green-600 data-[state=active]:text-white">
-              <TrendingUp className="h-4 w-4 mr-2" />
-              My Bids ({myBids.length})
-            </TabsTrigger>
-          </TabsList>
-
-          {/*  Available Tenders Tab */}
-          <TabsContent value="available">
-            <Card className="border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle>Available Tenders</CardTitle>
-                <CardDescription>Tenders where you have been shortlisted</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {availableTenders.length === 0 ? (
-                  <div className="text-center py-12">
-                    <FileText className="h-16 w-16 text-slate-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-slate-900 mb-2">No available tenders</h3>
-                    <p className="text-slate-600">Check back later for new opportunities</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {availableTenders.map((tender) => (
-                      <div
-                        key={tender.id}
-                        onClick={() => router.push(`/vendor/tender/${tender.id}`)}
-                        className="p-6 border border-slate-200 rounded-xl hover:border-green-400 hover:shadow-md transition-all duration-200 cursor-pointer bg-white"
-                      >
-                        <div className="flex items-start justify-between mb-4">
-                          <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-slate-900 mb-1">{tender.title}</h3>
-                            <p className="text-sm text-slate-600">
-                              {tender.chemical_name} • {tender.quantity} {tender.unit}
-                            </p>
-                          </div>
-                          {tender.shortlisted && (
-                            <div className="text-right">
-                              <div className="text-2xl font-bold text-green-600">{tender.shortlisted.fit_score}</div>
-                              <p className="text-xs text-slate-600">Fit Score</p>
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4 text-sm text-slate-600">
-                            <span className="flex items-center">
-                              <MapPin className="h-4 w-4 mr-1" />
-                              {tender.delivery_location}
-                            </span>
-                            <span className="flex items-center">
-                              <Calendar className="h-4 w-4 mr-1" />
-                              {new Date(tender.deadline).toLocaleDateString()}
-                            </span>
-                          </div>
-                          <Button variant="outline" size="sm" className="hover:bg-green-50 hover:border-green-300">
-                            Submit Bid →
-                          </Button>
-                        </div>
+        <Card className="border-0 shadow-lg">
+          <CardHeader>
+            <CardTitle className="text-xl font-bold text-slate-900">All Tenders</CardTitle>
+            <CardDescription>Track your procurement lifecycle across all stages</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {tenders.length === 0 ? (
+              <div className="text-center py-12">
+                <TrendingUp className="h-16 w-16 text-slate-300 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">No tenders yet</h3>
+                <p className="text-slate-600 mb-6">Start your first procurement process to see it here</p>
+                <Button
+                  onClick={() => router.push('/company/tender/new')}
+                  className="bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create First Tender
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {tenders.map((tender) => (
+                  <div
+                    key={tender.id}
+                    onClick={() => router.push(`/company/tender/${tender.id}`)}
+                    className="p-6 border border-slate-200 rounded-xl hover:border-blue-400 hover:shadow-md transition-all duration-200 cursor-pointer bg-white"
+                  >
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex-1">
+                        <h3 className="text-lg font-semibold text-slate-900 mb-1">{tender.title}</h3>
+                        <p className="text-sm text-slate-600">
+                          {tender.chemical_name} • {tender.quantity} {tender.unit}
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/*  My Bids Tab */}
-          <TabsContent value="mybids">
-            <Card className="border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle>My Bids</CardTitle>
-                <CardDescription>Track all your submitted bids</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {myBids.length === 0 ? (
-                  <div className="text-center py-12">
-                    <TrendingUp className="h-16 w-16 text-slate-300 mx-auto mb-4" />
-                    <h3 className="text-lg font-semibold text-slate-900 mb-2">No bids yet</h3>
-                    <p className="text-slate-600">Submit your first bid to get started</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {myBids.map((bid) => (
-                      <div key={bid.id} className="p-6 border border-slate-200 rounded-xl bg-white">
-                        <div className="flex items-start justify-between mb-4">
-                          <div>
-                            <h3 className="text-lg font-semibold text-slate-900 mb-1">
-                              {(bid as any).tender?.title || 'Tender'}
-                            </h3>
-                            <p className="text-sm text-slate-600">
-                              Delivery: {bid.delivery_time} days • Submitted:{' '}
-                              {new Date(bid.created_at).toLocaleDateString()}
-                            </p>
-                          </div>
-                          <Badge
-                            className={
-                              bid.status === 'accepted'
-                                ? 'bg-green-500'
-                                : bid.status === 'rejected'
-                                ? 'bg-red-500'
-                                : 'bg-blue-500'
-                            }
-                          >
-                            {bid.status.replace(/_/g, ' ')}
-                          </Badge>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-6">
-                            <div>
-                              <p className="text-sm text-slate-600">Initial Price</p>
-                              <p className="text-lg font-bold text-slate-900">
-                                ₹{bid.initial_price.toLocaleString()}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-slate-600">Current Price</p>
-                              <p className="text-lg font-bold text-green-600">
-                                ₹{bid.current_price.toLocaleString()}
-                              </p>
-                            </div>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => router.push(`/vendor/tender/${bid.tender_id}`)}
-                          >
-                            View Details
-                          </Button>
-                        </div>
+                      <Badge className={`${getStatusColor(tender.status)} text-white`}>
+                        {tender.status.replace(/_/g, ' ')}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <div className="flex items-center space-x-4 text-slate-600">
+                        <span className="flex items-center">
+                          <Building2 className="h-4 w-4 mr-1" />
+                          {tender.delivery_location}
+                        </span>
+                        <span className="flex items-center">
+                          <Clock className="h-4 w-4 mr-1" />
+                          Due: {new Date(tender.deadline).toLocaleDateString()}
+                        </span>
                       </div>
-                    ))}
+                      <Button variant="outline" size="sm" className="hover:bg-blue-50 hover:border-blue-300">
+                        View Details →
+                      </Button>
+                    </div>
                   </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
