@@ -13,6 +13,6 @@ export async function POST(req){
     }
     catch(error){
         console.error('Error: ' , error);
-        return Response.json({success: false , error: error.message}) , {status : 500};
+        return Response.json({success: false , error: error.message});
     }
 }
